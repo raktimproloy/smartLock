@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Monitor Dashboard - Complete Device Data</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card p {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-clear {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .btn-clear:hover:not(:disabled) {
+            background: #dc2626;
+        }
+        
+        .btn-refresh {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-refresh:hover:not(:disabled) {
+            background: #059669;
+        }
+        
+        .btn-check {
+            background: #f59e0b;
+            color: white;
+            font-size: 16px;
+            padding: 15px;
+        }
+        
+        .btn-check:hover:not(:disabled) {
+            background: #d97706;
+            transform: scale(1.05);
+        }
+        
+        .btn-view-devices {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .btn-view-devices:hover:not(:disabled) {
+            background: #2563eb;
+        }
+        
+        .esp32-status {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .status-online {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status-offline {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .tabs {
+            display: flex;
+            background: white;
+            border-radius: 10px 10px 0 0;
+            overflow: hidden;
+            margin-bottom: -1px;
+        }
+        
+        .tab {
+            padding: 15px 30px;
+            background: #f3f4f6;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            color: #6b7280;
+            transition: all 0.3s;
+        }
+        
+        .tab:hover {
+            background: #e5e7eb;
+        }
+        
+        .tab.active {
+            background: white;
+            color: #3b82f6;
+            border-bottom: 3px solid #3b82f6;
+        }
+        
+        .content-area {
+            background: white;
+            border-radius: 0 15px 15px 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-height: 700px;
+            overflow-y: auto;
+        }
+        
+        .logs-container {
+            display: none;
+        }
+        
+        .devices-container {
+            display: none;
+        }
+        
+        .active-container {
+            display: block;
+        }
+        
+        .log-entry {
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .log-SYSTEM {
+            background: #dbeafe;
+            border-color: #3b82f6;
+        }
+        
+        .log-USER_DETECTED {
+            background: #d1fae5;
+            border-color: #10b981;
+            font-weight: 600;
+        }
+        
+        .log-NO_USER_FOUND {
+            background: #fee2e2;
+            border-color: #ef4444;
+        }
+        
+        .log-HEARTBEAT {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+        
+        .log-DEVICE_SCAN_COMPLETE {
+            background: #e0e7ff;
+            border-color: #6366f1;
+            font-weight: 600;
+        }
+        
+        .log-ESP32_CONNECTED {
+            background: #d1fae5;
+            border-color: #10b981;
+        }
+        
+        .log-CHECK_NOW_SENT {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+        
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .log-type {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .log-time {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .log-message {
+            font-size: 14px;
+            color: #333;
+        }
+        
+        /* Device Data Styling */
+        .device-scan-entry {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .device-scan-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        .device-count {
+            background: #3b82f6;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        
+        .device-data {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        
+        .device-data h4 {
+            color: #60a5fa;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #374151;
+            padding-bottom: 5px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .status-online-dot {
+            background: #10b981;
+        }
+        
+        .status-offline-dot {
+            background: #ef4444;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .device-item {
+            background: #0f172a;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .device-item h4 {
+            color: #60a5fa;
+            margin-bottom: 10px;
+        }
+        
+        .device-field {
+            margin-bottom: 5px;
+            color: #cbd5e1;
+        }
+        
+        .device-field strong {
+            color: #94a3b8;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📡 ESP32-S3 Smart Lock Monitor</h1>
+            <div class="connection-status">
+                <span class="status-indicator status-online-dot" id="statusDot"></span>
+                <span id="connectionStatus">Connecting...</span>
+            </div>
+            
+            <div class="stats">
+                <div class="stat-card">
+                    <h3>Total Logs</h3>
+                    <p id="totalLogs">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Device Scans</h3>
+                    <p id="totalScans">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Last Scan Devices</h3>
+                    <p id="lastScanDevices">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>ESP32 Devices</h3>
+                    <p id="esp32Count">0</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ESP32 Status Card -->
+        <div class="esp32-status">
+            <div>
+                <h3 style="margin: 0 0 5px 0; color: #333;">ESP32 Command Stream</h3>
+                <span class="status-badge" id="esp32StatusBadge">
+                    <span class="status-indicator status-offline-dot"></span>
+                    Disconnected
+                </span>
+            </div>
+            <button class="btn btn-check" onclick="sendCheckNow()" id="checkNowBtn">
+                🔍 TRIGGER BLE SCAN
+            </button>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('logs')">📋 System Logs</button>
+            <button class="tab" onclick="showTab('devices')">📱 Device Data</button>
+        </div>
+        
+        <div class="content-area">
+            <!-- Logs Container -->
+            <div id="logsContainer" class="logs-container active-container">
+                <div class="controls" style="margin-bottom: 20px;">
+                    <button class="btn btn-refresh" onclick="refreshLogs()">🔄 Refresh Logs</button>
+                    <button class="btn btn-clear" onclick="clearLogs()">🗑️ Clear Logs</button>
+                </div>
+                <div id="logsList">
+                    <div class="empty-state">Waiting for ESP32 data...</div>
+                </div>
+            </div>
+            
+            <!-- Devices Container -->
+            <div id="devicesContainer" class="devices-container">
+                <div class="controls" style="margin-bottom: 20px;">
+                    <button class="btn btn-refresh" onclick="loadDeviceScans()">🔄 Refresh Device Data</button>
+                    <button class="btn btn-clear" onclick="clearDeviceScans()">🗑️ Clear Device Scans</button>
+                    <button class="btn btn-view-devices" onclick="loadLatestDeviceScan()">📊 View Latest Scan</button>
+                </div>
+                <div id="devicesList">
+                    <div class="empty-state">No device scan data available yet. Trigger a BLE scan to see device details.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let logs = [];
+        let deviceScans = [];
+        let eventSource;
+        let esp32Connected = false;
+        let currentTab = 'logs';
+        
+        // Connect to Server-Sent Events
+        function connectSSE() {
+            eventSource = new EventSource('/api/stream');
+            
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'FULL_DEVICE_DATA') {
+                    // Update device scans indicator
+                    loadDeviceScans();
+                } else {
+                    addLogEntry(data);
+                }
+                updateStats();
+            };
+            
+            eventSource.onopen = () => {
+                document.getElementById('connectionStatus').textContent = 'Connected to server';
+                document.getElementById('statusDot').className = 'status-indicator status-online-dot';
+            };
+            
+            eventSource.onerror = () => {
+                document.getElementById('connectionStatus').textContent = 'Connection lost';
+                document.getElementById('statusDot').className = 'status-indicator status-offline-dot';
+                setTimeout(connectSSE, 3000);
+            };
+        }
+        
+        // Check ESP32 status
+        async function checkESP32Status() {
+            try {
+                const response = await fetch('/api/esp32/status');
+                const data = await response.json();
+                esp32Connected = data.connected;
+                
+                const badge = document.getElementById('esp32StatusBadge');
+                const checkBtn = document.getElementById('checkNowBtn');
+                
+                if (data.connected) {
+                    badge.innerHTML = '<span class="status-indicator status-online-dot"></span> Connected (' + data.deviceCount + ')';
+                    badge.className = 'status-badge status-online';
+                    checkBtn.disabled = false;
+                } else {
+                    badge.innerHTML = '<span class="status-indicator status-offline-dot"></span> Disconnected';
+                    badge.className = 'status-badge status-offline';
+                    checkBtn.disabled = true;
+                }
+                
+                document.getElementById('esp32Count').textContent = data.deviceCount;
+            } catch (error) {
+                console.error('Failed to check ESP32 status:', error);
+            }
+        }
+        
+        // Send CHECK_NOW command
+        async function sendCheckNow() {
+            const btn = document.getElementById('checkNowBtn');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '⏳ Scanning...';
+            
+            try {
+                const response = await fetch('/api/check-now', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: 'Manual trigger from dashboard' })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    btn.textContent = '✅ Scan Triggered!';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                    }, 3000);
+                } else {
+                    btn.textContent = '❌ Failed';
+                    alert(result.message);
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                    }, 2000);
+                }
+            } catch (error) {
+                console.error('Failed to send CHECK_NOW:', error);
+                btn.textContent = '❌ Error';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }, 2000);
+            }
+        }
+        
+        // Load device scans
+        async function loadDeviceScans() {
+            try {
+                const response = await fetch('/api/device-scans');
+                deviceScans = await response.json();
+                renderDeviceScans();
+                updateStats();
+            } catch (error) {
+                console.error('Failed to load device scans:', error);
+            }
+        }
+        
+        // Load latest device scan
+        async function loadLatestDeviceScan() {
+            try {
+                const response = await fetch('/api/device-scans/latest');
+                const scan = await response.json();
+                
+                if (scan.message) {
+                    document.getElementById('devicesList').innerHTML = 
+                        '<div class="empty-state">' + scan.message + '</div>';
+                } else {
+                    renderSingleDeviceScan(scan);
+                }
+            } catch (error) {
+                console.error('Failed to load latest scan:', error);
+            }
+        }
+        
+        // Clear device scans
+        async function clearDeviceScans() {
+            if (!confirm('Are you sure you want to clear all device scan data?')) return;
+            
+            try {
+                await fetch('/api/device-scans', { method: 'DELETE' });
+                deviceScans = [];
+                renderDeviceScans();
+                updateStats();
+            } catch (error) {
+                console.error('Failed to clear device scans:', error);
+            }
+        }
+        
+        // Render device scans
+        function renderDeviceScans() {
+            const container = document.getElementById('devicesList');
+            
+            if (deviceScans.length === 0) {
+                container.innerHTML = '<div class="empty-state">No device scan data available yet.</div>';
+                return;
+            }
+            
+            container.innerHTML = deviceScans.map(scan => `
+                <div class="device-scan-entry">
+                    <div class="device-scan-header">
+                        <div>
+                            <h3>📊 Device Scan</h3>
+                            <small>${new Date(scan.timestamp).toLocaleString()}</small>
+                        </div>
+                        <div class="device-count">${scan.deviceCount} devices</div>
+                    </div>
+                    <div class="device-data">
+                        <h4>Complete Device Data:</h4>
+                        ${formatDeviceData(scan.data)}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Render single device scan
+        function renderSingleDeviceScan(scan) {
+            const container = document.getElementById('devicesList');
+            
+            container.innerHTML = `
+                <div class="device-scan-entry">
+                    <div class="device-scan-header">
+                        <div>
+                            <h3>📊 Latest Device Scan</h3>
+                            <small>${new Date(scan.timestamp).toLocaleString()}</small>
+                        </div>
+                        <div class="device-count">${scan.deviceCount} devices</div>
+                    </div>
+                    <div class="device-data">
+                        <h4>Complete Device Data:</h4>
+                        ${formatDeviceData(scan.data)}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Format device data for display
+        function formatDeviceData(data) {
+            if (!data) return '<div class="empty-state">No data</div>';
+            
+            // Split by device separator
+            const devices = data.split('|||').filter(d => d.trim().length > 0);
+            
+            if (devices.length === 0) {
+                return '<div class="empty-state">No devices found</div>';
+            }
+            
+            return devices.map(device => `
+                <div class="device-item">
+                    ${device.replace(/\\n/g, '<br>')}
+                </div>
+            `).join('');
+        }
+        
+        // Add log entry to UI
+        function addLogEntry(log) {
+            logs.unshift(log);
+            if (logs.length > 100) logs.pop();
+            renderLogs();
+        }
+        
+        // Render all logs
+        function renderLogs() {
+            const container = document.getElementById('logsList');
+            
+            if (logs.length === 0) {
+                container.innerHTML = '<div class="empty-state">No logs yet.</div>';
+                return;
+            }
+            
+            container.innerHTML = logs.map(log => `
+                <div class="log-entry log-${log.type}">
+                    <div class="log-header">
+                        <span class="log-type">${log.type}</span>
+                        <span class="log-time">${new Date(log.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <div class="log-message">${log.status}</div>
+                </div>
+            `).join('');
+        }
+        
+        // Update statistics
+        function updateStats() {
+            document.getElementById('totalLogs').textContent = logs.length;
+            document.getElementById('totalScans').textContent = deviceScans.length;
+            
+            if (deviceScans.length > 0) {
+                document.getElementById('lastScanDevices').textContent = deviceScans[0].deviceCount;
+            } else {
+                document.getElementById('lastScanDevices').textContent = '0';
+            }
+            
+            if (logs.length > 0) {
+                const lastLog = logs[0];
+                const timeDiff = Date.now() - new Date(lastLog.timestamp).getTime();
+                const seconds = Math.floor(timeDiff / 1000);
+            }
+        }
+        
+        // Refresh logs from server
+        async function refreshLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                logs = await response.json();
+                renderLogs();
+                updateStats();
+            } catch (error) {
+                console.error('Failed to refresh logs:', error);
+            }
+        }
+        
+        // Clear all logs
+        async function clearLogs() {
+            if (!confirm('Are you sure you want to clear all logs?')) return;
+            
+            try {
+                await fetch('/api/logs', { method: 'DELETE' });
+                logs = [];
+                renderLogs();
+                updateStats();
+            } catch (error) {
+                console.error('Failed to clear logs:', error);
+            }
+        }
+        
+        // Switch tabs
+        function showTab(tabName) {
+            currentTab = tabName;
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Show/hide containers
+            document.querySelectorAll('.logs-container, .devices-container').forEach(container => {
+                container.classList.remove('active-container');
+            });
+            
+            document.getElementById(tabName + 'Container').classList.add('active-container');
+            
+            // Load data if needed
+            if (tabName === 'devices' && deviceScans.length === 0) {
+                loadDeviceScans();
+            }
+        }
+        
+        // Initialize
+        connectSSE();
+        refreshLogs();
+        checkESP32Status();
+        
+        // Update stats and ESP32 status periodically
+        setInterval(updateStats, 1000);
+        setInterval(checkESP32Status, 3000);
+        setInterval(loadDeviceScans, 10000); // Refresh device scans every 10 seconds
+    </script>
+</body>
+</html>
